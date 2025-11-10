@@ -2,17 +2,49 @@
 # Map service names to their git repository URLs and build commands
 
 repositories:
-  f1r3node: git@github.com:F1R3FLY-io/f1r3node.git
-  rust-client: git@github.com:F1R3FLY-io/rust-client.git
+  f1r3node:
+    url: git@github.com:F1R3FLY-io/f1r3node.git
+    branch: main  # Scala node on main branch
+  f1r3node-rust:
+    url: git@github.com:F1R3FLY-io/f1r3node.git
+    branch: rust-dev  # Rust node on rust-dev branch
+  rust-client:
+    url: git@github.com:F1R3FLY-io/rust-client.git
+    branch: main
 
 # Build configuration for services
 builds:
   f1r3node:
+    # Scala node build configuration (main branch)
     # Main build command (compiles Scala and stages executable)
     build_command: "sbt stage"
 
-    # Alternative: Clean build
-    # build_command: "sbt clean stage"
+    # Docker build command for Scala node
+    docker_build_command: "sbt node/docker:publishLocal"
+
+    # Build environment
+    environment: "nix"  # Uses nix develop shell
+
+    # Docker image produced
+    docker_image: "f1r3flyindustries/f1r3fly-scala-node:latest"
+
+    # Build dependencies
+    dependencies:
+      - "sbt"
+      - "cargo"
+      - "rustc"
+      - "nix (optional but recommended)"
+
+    # Notes:
+    # - Scala-based node implementation on main branch
+    # - Uses SBT (Scala Build Tool) as primary build system
+    # - Requires Rust for native libraries (rspace, rholang)
+    # - Nix flake provides complete dev environment
+
+  f1r3node-rust:
+    # Rust node build configuration (rust-dev branch)
+    # Main build command (compiles Scala and stages executable)
+    build_command: "sbt stage"
 
     # Docker build command (includes Rust library compilation)
     docker_build_command: "sbt node/docker:publishLocal"
@@ -23,7 +55,6 @@ builds:
     # Pre-build steps for regular builds
     pre_build_steps:
       - "./scripts/build_rust_libraries.sh"  # Native build
-      # Or for cross-platform: "./scripts/build_rust_libraries_docker.sh"
 
     # Pre-build steps for Docker builds (runs in Nix environment)
     docker_pre_build_steps:

@@ -11,14 +11,14 @@ console = Console()
 
 
 def clone_services(
-    service_repos: Dict[str, str],
+    service_repos: Dict[str, Dict],
     services_dir: Path,
     force: bool = False
 ) -> None:
     """Clone service repositories into the services directory.
 
     Args:
-        service_repos: Dictionary mapping service names to git repository URLs.
+        service_repos: Dictionary mapping service names to repository config (url, branch).
         services_dir: Directory to clone services into.
         force: If True, remove existing service directories before cloning.
     """
@@ -37,8 +37,12 @@ def clone_services(
         console=console,
     ) as progress:
 
-        for service_name, repo_url in service_repos.items():
+        for service_name, repo_config in service_repos.items():
             service_path = services_dir / service_name
+
+            # Extract URL and branch
+            repo_url = repo_config.get('url', repo_config) if isinstance(repo_config, dict) else repo_config
+            branch = repo_config.get('branch') if isinstance(repo_config, dict) else None
 
             # Check if service already exists
             if service_path.exists():
@@ -63,20 +67,30 @@ def clone_services(
                     continue
 
             # Clone the repository
-            task = progress.add_task(
-                f"Cloning {service_name}...",
-                total=None
-            )
+            clone_msg = f"Cloning {service_name}"
+            if branch:
+                clone_msg += f" ({branch})"
+            task = progress.add_task(f"{clone_msg}...", total=None)
 
             try:
+                # Build git clone command with branch if specified
+                clone_cmd = ["git", "clone"]
+                if branch:
+                    clone_cmd.extend(["-b", branch])
+                clone_cmd.extend([repo_url, str(service_path)])
+
                 result = subprocess.run(
-                    ["git", "clone", repo_url, str(service_path)],
+                    clone_cmd,
                     capture_output=True,
                     text=True,
                     check=True
                 )
                 progress.update(task, completed=True)
-                console.print(f"[green]✓[/green] Cloned {service_name}")
+
+                success_msg = f"[green]✓[/green] Cloned {service_name}"
+                if branch:
+                    success_msg += f" [dim]({branch})[/dim]"
+                console.print(success_msg)
 
             except subprocess.CalledProcessError as e:
                 console.print(
@@ -95,7 +109,7 @@ def check_docker_compose_installed() -> bool:
     """
     try:
         result = subprocess.run(
-            ["docker-compose", "--version"],
+            ["docker", "compose", "version"],
             capture_output=True,
             text=True,
             check=True

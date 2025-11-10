@@ -31,7 +31,7 @@ class ComposeManager:
         Returns:
             List of command parts for docker-compose.
         """
-        cmd = ["docker-compose"]
+        cmd = ["docker", "compose"]
 
         # Add compose files with -f flags
         compose_files = self.config.get_compose_files_for_profile(self.profile)

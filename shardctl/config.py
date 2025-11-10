@@ -97,14 +97,12 @@ class Config:
         services = config.get('services', {})
         return list(services.keys())
 
-    def get_service_repos(self) -> Dict[str, str]:
-        """Get mapping of service names to their repository URLs.
-
-        This should be configured in a separate config file (e.g., services.yml).
-        For now, returns an empty dict as a placeholder.
+    def get_service_repos(self) -> Dict[str, Dict]:
+        """Get mapping of service names to their repository configuration.
 
         Returns:
-            Dictionary mapping service names to git repository URLs.
+            Dictionary mapping service names to repository config (url, branch, etc).
+            For backward compatibility, also supports simple string URLs.
         """
         # Check for services.yml configuration
         services_config_file = self.root_dir / "services.yml"
@@ -112,7 +110,19 @@ class Config:
         if services_config_file.exists():
             with open(services_config_file, 'r') as f:
                 services_config = yaml.safe_load(f)
-                return services_config.get('repositories', {})
+                repos = services_config.get('repositories', {})
+
+                # Normalize to dict format
+                normalized = {}
+                for name, config in repos.items():
+                    if isinstance(config, str):
+                        # Old format: just URL string
+                        normalized[name] = {'url': config, 'branch': None}
+                    else:
+                        # New format: dict with url and branch
+                        normalized[name] = config
+
+                return normalized
 
         return {}
 
