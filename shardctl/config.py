@@ -97,11 +97,44 @@ class Config:
         services = config.get('services', {})
         return list(services.keys())
 
-    def get_service_repos(self) -> Dict[str, Dict]:
-        """Get mapping of service names to their repository configuration.
+    def is_service_enabled(self, service_name: str) -> bool:
+        """Check if a service is enabled.
+
+        Args:
+            service_name: Name of the service to check.
 
         Returns:
-            Dictionary mapping service names to repository config (url, branch, etc).
+            True if service is enabled (or enabled field is missing), False otherwise.
+        """
+        services_config_file = self.root_dir / "services.yml"
+
+        if not services_config_file.exists():
+            return True
+
+        with open(services_config_file, 'r') as f:
+            services_config = yaml.safe_load(f)
+            repos = services_config.get('repositories', {})
+
+            if service_name not in repos:
+                return True
+
+            repo_config = repos[service_name]
+
+            # Handle old format (string URL)
+            if isinstance(repo_config, str):
+                return True
+
+            # Handle new format (dict) - default to True if enabled field is missing
+            return repo_config.get('enabled', True)
+
+    def get_service_repos(self, only_enabled: bool = True) -> Dict[str, Dict]:
+        """Get mapping of service names to their repository configuration.
+
+        Args:
+            only_enabled: If True, only return enabled services. If False, return all services.
+
+        Returns:
+            Dictionary mapping service names to repository config (url, branch, enabled, etc).
             For backward compatibility, also supports simple string URLs.
         """
         # Check for services.yml configuration
@@ -117,10 +150,22 @@ class Config:
                 for name, config in repos.items():
                     if isinstance(config, str):
                         # Old format: just URL string
-                        normalized[name] = {'url': config, 'branch': None}
+                        normalized[name] = {'url': config, 'branch': None, 'enabled': True}
                     else:
                         # New format: dict with url and branch
-                        normalized[name] = config
+                        # Default enabled to True if not specified
+                        service_config = config.copy()
+                        if 'enabled' not in service_config:
+                            service_config['enabled'] = True
+                        normalized[name] = service_config
+
+                # Filter by enabled status if requested
+                if only_enabled:
+                    normalized = {
+                        name: config
+                        for name, config in normalized.items()
+                        if config.get('enabled', True)
+                    }
 
                 return normalized
 
@@ -145,8 +190,11 @@ class Config:
 
         return None
 
-    def get_all_build_configs(self) -> Dict[str, Dict]:
+    def get_all_build_configs(self, only_enabled: bool = True) -> Dict[str, Dict]:
         """Get all service build configurations.
+
+        Args:
+            only_enabled: If True, only return build configs for enabled services. If False, return all.
 
         Returns:
             Dictionary mapping service names to their build configurations.
@@ -156,7 +204,34 @@ class Config:
         if services_config_file.exists():
             with open(services_config_file, 'r') as f:
                 services_config = yaml.safe_load(f)
-                return services_config.get('builds', {})
+                builds = services_config.get('builds', {})
+
+                # Filter by enabled status if requested
+                if only_enabled:
+                    # Get repositories to check enabled status
+                    repos = services_config.get('repositories', {})
+                    filtered_builds = {}
+
+                    for service_name, build_config in builds.items():
+                        # Check if service exists in repositories
+                        if service_name in repos:
+                            repo_config = repos[service_name]
+                            # Handle old format (string URL)
+                            if isinstance(repo_config, str):
+                                is_enabled = True
+                            else:
+                                # Handle new format (dict) - default to True
+                                is_enabled = repo_config.get('enabled', True)
+
+                            if is_enabled:
+                                filtered_builds[service_name] = build_config
+                        else:
+                            # Service not in repositories - include it (for services that only have builds)
+                            filtered_builds[service_name] = build_config
+
+                    return filtered_builds
+
+                return builds
 
         return {}
 

@@ -1,5 +1,15 @@
 # Service repositories configuration
 # Map service names to their git repository URLs and build commands
+#
+# The 'enabled' field controls whether a service is included in operations by default:
+#   - enabled: true  (default) - service is cloned/built when using default commands
+#   - enabled: false - service is skipped unless explicitly named or --all flag is used
+#
+# Examples:
+#   shardctl clone              # Clones only enabled services
+#   shardctl clone --all        # Clones all services (including disabled)
+#   shardctl build-service -a   # Builds all enabled services
+#   shardctl build-service my-disabled-service --docker  # Builds specific service even if disabled
 
 repositories:
   f1r3node:
@@ -17,12 +27,14 @@ repositories:
   f1r3sky:
     url: git@github.com:F1R3FLY-io/f1r3sky.git
     branch: demo-dev
+    enabled: false  # Frontend demo - disable by default
   embers:
     url: git@github.com:nashef/firefly-embers.git
     branch: main
   embers-frontend:
     url: git@github.com:F1R3FLY-io/embers-frontend.git
     branch: main
+    enabled: false  # Web UI frontend - disable by default (requires NPM_TOKEN)
 
 # Build configuration for services
 builds:
