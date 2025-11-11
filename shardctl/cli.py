@@ -5,7 +5,6 @@ from typing import List, Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
 from .compose import ComposeManager
 from .config import Config
@@ -47,34 +46,53 @@ def clone(
         "-f",
         help="Remove existing service directories before cloning"
     ),
+    all_services: bool = typer.Option(
+        False,
+        "--all",
+        help="Clone all services including disabled ones (default: enabled only)"
+    ),
 ):
-    """Clone all service repositories with their configured branches.
+    """Clone service repositories with their configured branches.
+
+    By default, only enabled services are cloned. Use --all to clone all services
+    including disabled ones.
 
     This command reads repository URLs and branches from services.yml and clones
     them into the services/ directory. Each service becomes an independent git
     repository that is ignored by the parent integration repo.
 
     Example:
-        shardctl clone          # Clone all services (skip existing)
-        shardctl clone --force  # Remove and re-clone all services
+        shardctl clone              # Clone enabled services only
+        shardctl clone --all        # Clone all services (including disabled)
+        shardctl clone --force      # Remove and re-clone enabled services
+        shardctl clone --all --force  # Remove and re-clone all services
     """
     config = Config()
 
-    # Get service repositories from config
-    service_repos = config.get_service_repos()
+    # Get service repositories from config (filter by enabled unless --all is specified)
+    service_repos = config.get_service_repos(only_enabled=not all_services)
 
     if not service_repos:
-        console.print(
-            "[yellow]No service repositories configured.[/yellow]\n"
-            "[dim]Check your services.yml file. It should have a 'repositories' section.[/dim]"
-        )
+        if all_services:
+            console.print(
+                "[yellow]No service repositories configured.[/yellow]\n"
+                "[dim]Check your services.yml file. It should have a 'repositories' section.[/dim]"
+            )
+        else:
+            console.print(
+                "[yellow]No enabled service repositories found.[/yellow]\n"
+                "[dim]Use --all to clone disabled services or check your services.yml file.[/dim]"
+            )
         return
 
     # Ensure services directory exists
     config.ensure_services_dir()
 
     # Clone services
-    console.print("[bold blue]Cloning service repositories...[/bold blue]\n")
+    if all_services:
+        console.print("[bold blue]Cloning all service repositories (including disabled)...[/bold blue]\n")
+    else:
+        console.print("[bold blue]Cloning enabled service repositories...[/bold blue]\n")
     clone_services(service_repos, config.services_dir, force=force)
     console.print("\n[green]✓[/green] Clone completed")
 
@@ -220,7 +238,7 @@ def shell(
 def status(
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Compose profile (dev/prod)"),
 ):
-    """Display service status in a formatted table."""
+    """Display service status."""
     if not validate_environment():
         raise typer.Exit(1)
 
@@ -231,35 +249,26 @@ def status(
         console.print("[yellow]No running services found[/yellow]")
         return
 
-    # Create a table
-    table = Table(title="Service Status", show_header=True, header_style="bold magenta")
-    table.add_column("Name", style="cyan", no_wrap=True)
-    table.add_column("Service", style="blue")
-    table.add_column("State", style="green")
-    table.add_column("Status", style="yellow")
-    table.add_column("Ports", style="magenta")
-
     for service_info in services:
         formatted = format_service_status(service_info)
 
         # Color code the state
         state = formatted["State"]
         if state == "running":
-            state_display = f"[green]{state}[/green]"
+            state_color = "green"
         elif state == "exited":
-            state_display = f"[red]{state}[/red]"
+            state_color = "red"
         else:
-            state_display = f"[yellow]{state}[/yellow]"
+            state_color = "yellow"
 
-        table.add_row(
-            formatted["Name"],
-            formatted["Service"],
-            state_display,
-            formatted["Status"],
-            formatted["Ports"],
+        # Simple line format: NAME SERVICE STATE STATUS PORTS
+        console.print(
+            f"{formatted['Name']:<30} "
+            f"{formatted['Service']:<20} "
+            f"[{state_color}]{state:<10}[/{state_color}] "
+            f"{formatted['Status']:<30} "
+            f"{formatted['Ports']}"
         )
-
-    console.print(table)
 
 
 @app.command()
@@ -270,13 +279,21 @@ def setup(
         "-f",
         help="Remove existing service directories before cloning"
     ),
+    all_services: bool = typer.Option(
+        False,
+        "--all",
+        help="Clone all services including disabled ones (default: enabled only)"
+    ),
     create_config: bool = typer.Option(
         False,
         "--create-config",
         help="Create an example services.yml configuration file"
     ),
 ):
-    """Clone all service repositories into the services/ directory.
+    """Clone service repositories into the services/ directory.
+
+    By default, only enabled services are cloned. Use --all to clone all services
+    including disabled ones.
 
     This command reads repository URLs from services.yml and clones them
     into the services/ directory. Each service becomes an independent git
@@ -296,21 +313,30 @@ def setup(
             create_services_config_example(services_config_file)
         return
 
-    # Get service repositories from config
-    service_repos = config.get_service_repos()
+    # Get service repositories from config (filter by enabled unless --all is specified)
+    service_repos = config.get_service_repos(only_enabled=not all_services)
 
     if not service_repos:
-        console.print(
-            "[yellow]No service repositories configured.[/yellow]\n"
-            "[dim]Run 'shardctl setup --create-config' to create an example configuration.[/dim]"
-        )
+        if all_services:
+            console.print(
+                "[yellow]No service repositories configured.[/yellow]\n"
+                "[dim]Run 'shardctl setup --create-config' to create an example configuration.[/dim]"
+            )
+        else:
+            console.print(
+                "[yellow]No enabled service repositories found.[/yellow]\n"
+                "[dim]Use --all to clone disabled services or run 'shardctl setup --create-config' to create an example configuration.[/dim]"
+            )
         return
 
     # Ensure services directory exists
     config.ensure_services_dir()
 
     # Clone services
-    console.print("[bold blue]Setting up service repositories...[/bold blue]\n")
+    if all_services:
+        console.print("[bold blue]Setting up all service repositories (including disabled)...[/bold blue]\n")
+    else:
+        console.print("[bold blue]Setting up enabled service repositories...[/bold blue]\n")
     clone_services(service_repos, config.services_dir, force=force)
     console.print("\n[green]✓[/green] Setup completed")
 
@@ -318,61 +344,127 @@ def setup(
 @app.command(name="build-service")
 def build_service_cmd(
     service: Optional[str] = typer.Argument(None, help="Service name to build"),
-    docker: bool = typer.Option(
+    no_docker: bool = typer.Option(
         False,
-        "--docker",
-        "-d",
-        help="Build Docker image instead of regular build"
+        "--no-docker",
+        help="Skip building Docker images (only build from source)"
     ),
     list_services: bool = typer.Option(
         False,
         "--list",
         "-l",
-        help="List all services with build configurations"
+        help="List services with build configurations"
+    ),
+    all_services: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Build all enabled services (without service arg) or show disabled services (with --list)"
     ),
 ):
     """Build a service using its configured build commands.
 
+    By default, this command builds both from source AND creates Docker images.
+    Use --no-docker to skip Docker image building.
+
     This command reads the build configuration from services.yml and executes
-    the appropriate build commands for the specified service. Use --docker to
-    build the Docker image instead of the regular build.
+    the appropriate build commands for the specified service.
 
     Examples:
-        shardctl build-service f1r3node
-        shardctl build-service f1r3node --docker
-        shardctl build-service --list
+        shardctl build-service f1r3node           # Build source + Docker image
+        shardctl build-service f1r3node --no-docker  # Build source only
+        shardctl build-service -a                 # Build all enabled services (source + Docker)
+        shardctl build-service -a --no-docker     # Build all enabled services (source only)
+        shardctl build-service --list             # List enabled services
+        shardctl build-service --list --all       # List all services (including disabled)
     """
     config = Config()
 
     # List services if requested
     if list_services:
-        build_configs = config.get_all_build_configs()
+        # Use all_services flag to determine if we show disabled services
+        build_configs = config.get_all_build_configs(only_enabled=not all_services)
         if not build_configs:
-            console.print("[yellow]No build configurations found in services.yml[/yellow]")
+            if all_services:
+                console.print("[yellow]No build configurations found in services.yml[/yellow]")
+            else:
+                console.print(
+                    "[yellow]No enabled services with build configurations found[/yellow]\n"
+                    "[dim]Use --all to see disabled services[/dim]"
+                )
             return
 
-        table = Table(title="Services with Build Configurations", show_header=True)
-        table.add_column("Service", style="cyan")
-        table.add_column("Build Command", style="green")
-        table.add_column("Docker Build", style="blue")
-        table.add_column("Environment", style="magenta")
-
+        # Simple list output - one service per line
         for svc_name, cfg in build_configs.items():
             build_cmd = cfg.get("build_command", "N/A")
             docker_cmd = cfg.get("docker_build_command", "N/A")
             env = cfg.get("environment", "default")
-            table.add_row(svc_name, build_cmd, docker_cmd, env)
 
-        console.print(table)
+            # Format: SERVICE_NAME (env: ENVIRONMENT)
+            console.print(f"[cyan]{svc_name}[/cyan] [dim](env: {env})[/dim]")
+            console.print(f"  Build: {build_cmd}")
+            if docker_cmd != "N/A":
+                console.print(f"  Docker: {docker_cmd}")
+            console.print()  # Empty line between services
+
         return
 
-    # Require service argument if not listing
+    # Build all enabled services if -a/--all is specified without a service name
+    if all_services and not service:
+        build_configs = config.get_all_build_configs(only_enabled=True)
+        if not build_configs:
+            console.print("[yellow]No enabled services with build configurations found[/yellow]")
+            return
+
+        if no_docker:
+            console.print(f"[bold blue]Building {len(build_configs)} enabled service(s) from source...[/bold blue]\n")
+        else:
+            console.print(f"[bold blue]Building {len(build_configs)} enabled service(s) (source + Docker)...[/bold blue]\n")
+
+        failed_services = []
+        for svc_name, build_config in build_configs.items():
+            console.print(f"[cyan]Building {svc_name}...[/cyan]")
+
+            # Get service path - use working_directory if specified, otherwise use service name
+            working_dir = build_config.get("working_directory")
+            if working_dir:
+                service_path = config.services_dir / working_dir
+            else:
+                service_path = config.services_dir / svc_name
+
+            # Build from source first
+            success = build_service(svc_name, service_path, build_config, docker=False)
+
+            if not success:
+                failed_services.append(svc_name)
+                console.print()  # Empty line between services
+                continue
+
+            # Build Docker image if not skipped
+            if not no_docker:
+                # Check if docker build command exists
+                if build_config.get("docker_build_command"):
+                    success_docker = build_service(svc_name, service_path, build_config, docker=True)
+                    if not success_docker:
+                        failed_services.append(f"{svc_name} (Docker)")
+                # If no docker build command, that's okay - just skip it
+
+            console.print()  # Empty line between services
+
+        if failed_services:
+            console.print(f"[red]✗[/red] {len(failed_services)} build(s) failed: {', '.join(failed_services)}")
+            raise typer.Exit(1)
+        else:
+            console.print(f"[green]✓[/green] All {len(build_configs)} service(s) built successfully")
+        return
+
+    # Require service argument if not listing and not building all
     if not service:
         console.print("[red]Error: SERVICE argument is required[/red]")
-        console.print("[dim]Use --list to see available services[/dim]")
+        console.print("[dim]Use --list to see available services or -a to build all enabled services[/dim]")
         raise typer.Exit(1)
 
-    # Get build configuration for the service
+    # Get build configuration for the service (works regardless of enabled status)
     build_config = config.get_service_build_config(service)
 
     if not build_config:
@@ -389,11 +481,21 @@ def build_service_cmd(
     else:
         service_path = config.services_dir / service
 
-    # Build the service
-    success = build_service(service, service_path, build_config, docker=docker)
+    # Build from source first
+    success = build_service(service, service_path, build_config, docker=False)
 
     if not success:
         raise typer.Exit(1)
+
+    # Build Docker image if not skipped
+    if not no_docker:
+        # Check if docker build command exists
+        if build_config.get("docker_build_command"):
+            success_docker = build_service(service, service_path, build_config, docker=True)
+            if not success_docker:
+                raise typer.Exit(1)
+        else:
+            console.print(f"[dim]No Docker build command configured for {service}, skipping Docker build[/dim]")
 
 
 @app.command()
