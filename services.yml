@@ -18,6 +18,7 @@ repositories:
   f1r3node-rust:
     url: git@github.com:F1R3FLY-io/f1r3node.git
     branch: rust-dev  # Rust node on rust-dev branch
+    enabled: false  # rust-dev branch doesn't exist yet
   rust-client:
     url: git@github.com:F1R3FLY-io/rust-client.git
     branch: main

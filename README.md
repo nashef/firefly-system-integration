@@ -41,10 +41,60 @@ This repository provides a clean structure for managing multiple microservice re
 
 ### Prerequisites
 
-- Python 3.8+
-- Docker and docker-compose
-- Git (for cloning service repos)
-- Poetry (Python dependency management)
+#### Core Requirements
+
+- **Python 3.8+** - Required for shardctl CLI
+- **Docker & Docker Compose** - Container orchestration
+- **Git** - For cloning service repositories
+- **Poetry** - Python dependency management for shardctl
+
+#### Service-Specific Build Dependencies
+
+Different services require specific build tools. Install based on which services you'll be building:
+
+**For F1R3node (Scala blockchain node):**
+- **Nix** (recommended) - Provides complete dev environment via `nix develop`
+  ```bash
+  # Install Nix (Linux/macOS)
+  sh <(curl -L https://nixos.org/nix/install) --daemon
+  ```
+- **OR manually install:**
+  - **SBT (Scala Build Tool)** - Version 1.5+
+  - **Rust toolchain** - For native libraries (rspace, rholang)
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+  - **Cargo** - Comes with Rust installation
+  - **Java 11** - OpenJDK 11 or higher
+
+**For F1R3Sky services (AT Protocol - Node.js/TypeScript):**
+- **Node.js 18+** - JavaScript runtime (version 20.11 recommended for Docker builds)
+- **pnpm 8.15.9+** - Fast, disk-efficient package manager
+  ```bash
+  curl -fsSL https://get.pnpm.io/install.sh | sh -
+  ```
+- **node-gyp** - For compiling native Node.js modules
+  ```bash
+  # After installing pnpm, set up global bin directory and install node-gyp
+  pnpm setup
+  export PNPM_HOME="$HOME/.local/share/pnpm"
+  export PATH="$PNPM_HOME:$PATH"
+  pnpm add -g node-gyp
+  ```
+
+**For Embers (Rust API service):**
+- **Rust 1.91+** - Rust toolchain
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+- **Cargo** - Comes with Rust
+- **pkg-config** - Build configuration tool
+- **protobuf-compiler** - Protocol buffers compiler
+- **clang** - C/C++ compiler for some Rust dependencies
+
+**For Rust Client:**
+- **Rust 1.85.0+** - Latest stable Rust
+- **Cargo** - Package manager (comes with Rust)
 
 ### Install Poetry
 
@@ -81,87 +131,211 @@ Poetry automatically manages a virtual environment and installs all dependencies
 
 ## Quick Start
 
-### 1. Configure Service Repositories
+### Complete Setup from Scratch
 
-Create a `services.yml` file to define your service repositories:
+This guide walks through setting up the entire F1R3FLY stack from scratch:
 
-```bash
-poetry run shardctl setup --create-config
-```
+#### 1. Install Dependencies
 
-Edit `services.yml` to add your service repository URLs:
-
-```yaml
-repositories:
-  service-1: https://github.com/your-org/service-1.git
-  service-2: https://github.com/your-org/service-2.git
-  api-gateway: https://github.com/your-org/api-gateway.git
-```
-
-### 2. Clone Service Repositories
-
-Clone all configured services into the `services/` directory:
+First, ensure you have the core requirements:
 
 ```bash
-poetry run shardctl setup
+# Install Poetry (if not already installed)
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Install shardctl
+poetry install
+
+# Verify installation
+poetry run shardctl --help
 ```
 
-Each service becomes an independent git repository that you can work with normally.
+#### 2. Install Service Build Tools
 
-### 3. Start Services
+Install the build dependencies for the services you want to work with:
 
 ```bash
-# Start all services in detached mode
+# For F1R3Sky services (Node.js/TypeScript)
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+pnpm setup
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+pnpm add -g node-gyp
+
+# For Rust services (Embers, rust-client)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
+# For F1R3node (Scala) - Option 1: Use Nix (recommended)
+sh <(curl -L https://nixos.org/nix/install) --daemon
+
+# For F1R3node (Scala) - Option 2: Install manually
+# Install SBT, Java 11, and Rust (see Prerequisites section)
+```
+
+#### 3. Clone Service Repositories
+
+Clone all service repositories with correct branches:
+
+```bash
+# This clones all enabled services defined in services.yml
+poetry run shardctl clone
+```
+
+This will clone:
+- `f1r3node` (main branch) - Scala blockchain node
+- `rust-client` (main branch) - Rust CLI client
+- `f1r3sky-backend` (main branch) - AT Protocol services
+- `embers` (main branch) - Rust API bridge
+
+Each service directory becomes an independent git repository.
+
+#### 4. Build Services
+
+Build all services from source (optional - you can skip to Docker builds):
+
+```bash
+# Build all enabled services from source
+poetry run shardctl build-service -a --no-docker
+
+# Or build specific services
+poetry run shardctl build-service f1r3node --no-docker
+poetry run shardctl build-service embers --no-docker
+```
+
+**Note:** Source builds are useful for development. For production, you only need Docker images.
+
+#### 5. Build Docker Images
+
+Build Docker images for all services:
+
+```bash
+# Build all Docker images (source + Docker build)
+poetry run shardctl build-service -a
+
+# This builds images for:
+# - f1r3flyindustries/f1r3fly-scala-node:latest (f1r3node)
+# - f1r3flyindustries/embers:latest
+# - f1r3flyindustries/f1r3sky-bsky:latest
+# - f1r3flyindustries/f1r3sky-pds:latest
+# - f1r3flyindustries/f1r3sky-bsync:latest
+# - f1r3flyindustries/f1r3sky-ozone:latest
+```
+
+**Expected build times:**
+- F1R3node: ~10-15 minutes (first build)
+- F1R3Sky services: ~2-3 minutes each
+- Embers: ~3-5 minutes
+
+#### 6. Start the Stack
+
+Start all services using Docker Compose:
+
+```bash
+# Start F1R3node blockchain shard (5 validators)
 poetry run shardctl up
 
-# Start with development profile
-poetry run shardctl up --profile dev
+# Start F1R3Sky AT Protocol services
+docker compose -f docker-compose.f1r3sky.yml up -d
 
-# Start specific services
-poetry run shardctl up service-1 service-2
-
-# Start in foreground with build
-poetry run shardctl up --foreground --build
+# Start Embers API bridge
+docker compose -f docker-compose.embers.yml up -d
 ```
 
-### 4. View Status
+**Important:** F1R3node blockchain needs 2-3 minutes after startup to:
+1. Complete genesis ceremony (validators signing genesis block)
+2. Transition to "Running" state
+3. Initialize Casper consensus (ready to accept deployments)
+
+Wait for blockchain initialization before using Embers API.
+
+#### 7. Verify All Services Running
+
+Check that all containers are healthy:
 
 ```bash
-# Show formatted status table
+# View formatted status
 poetry run shardctl status
 
-# List containers (raw docker-compose output)
-poetry run shardctl ps
+# Or check all containers
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-### 5. View Logs
+You should see:
+- **F1R3node**: 5 nodes (bootstrap, validator1-3, readonly) - all healthy
+- **F1R3Sky**: postgres, redis (healthy), bsky, pds, bsync, ozone
+- **Embers**: embers-api
+- **Monitoring**: prometheus, grafana
+
+#### 8. Access Services
+
+Services are now accessible:
+
+- **F1R3node RPC** (validator1): http://localhost:40411
+- **F1R3node API** (validator1): http://localhost:40413
+- **F1R3node Read-only**: http://localhost:40453
+- **Embers API**: http://localhost:8080
+- **F1R3Sky PDS**: http://localhost:2583
+- **F1R3Sky BSKY (AppView)**: http://localhost:2584
+- **F1R3Sky Ozone (Moderation)**: http://localhost:3101
+- **Grafana**: http://localhost:3000
+- **Prometheus**: http://localhost:9090
+
+#### 9. View Logs
+
+Monitor service logs:
 
 ```bash
-# View logs for all services
-poetry run shardctl logs
-
-# Follow logs in real-time
+# F1R3node blockchain logs
 poetry run shardctl logs --follow
 
-# Show last 100 lines for specific service
-poetry run shardctl logs service-1 --tail 100
+# Embers API logs
+docker logs -f embers-api
+
+# F1R3Sky service logs
+docker logs -f f1r3sky-pds
+docker logs -f f1r3sky-bsky
 ```
 
-### 6. Stop Services
+#### 10. Stop Services
+
+When done:
 
 ```bash
-# Stop and remove containers
+# Stop all services
 poetry run shardctl down
-
-# Also remove volumes
-poetry run shardctl down --volumes
+docker compose -f docker-compose.f1r3sky.yml down
+docker compose -f docker-compose.embers.yml down
 ```
 
-**Tip:** To avoid typing `poetry run` for every command, activate the virtual environment:
+### Quick Commands Reference
+
+```bash
+# List available services
+poetry run shardctl build-service --list
+
+# Build specific service (source only)
+poetry run shardctl build-service f1r3node --no-docker
+
+# Build Docker image only
+poetry run shardctl build-service embers
+
+# View service status
+poetry run shardctl status
+
+# Follow all logs
+poetry run shardctl logs --follow
+
+# Restart blockchain after data cleanup
+sudo rm -rf services/f1r3node/docker/data
+poetry run shardctl up
+```
+
+**Tip:** Activate Poetry shell to avoid typing `poetry run` every time:
 ```bash
 poetry shell
-# Now you can use shardctl directly
 shardctl up
+shardctl status
 ```
 
 ## CLI Commands
@@ -417,7 +591,116 @@ shardctl up service-1 --build
 
 ## Troubleshooting
 
-### Services Won't Start
+### Common Build Issues
+
+#### F1R3Sky services fail with "better-sqlite3" errors
+
+**Symptom:** Build fails with compilation errors for `better-sqlite3` module
+
+**Cause:** Node.js 24.x has compatibility issues with better-sqlite3
+
+**Solution:**
+1. Ensure you have node-gyp installed globally:
+   ```bash
+   pnpm add -g node-gyp
+   ```
+2. Use Docker builds instead of source builds (Docker uses Node 20.11):
+   ```bash
+   poetry run shardctl build-service f1r3sky-backend-bsky  # Builds Docker image
+   ```
+3. The Docker build will succeed even if source build fails
+
+#### Missing pnpm or node-gyp
+
+**Symptom:** `pnpm: not found` or `node-gyp: not found`
+
+**Solution:**
+```bash
+# Install pnpm
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+# Setup pnpm paths
+pnpm setup
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+
+# Add to ~/.bashrc for persistence
+echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.bashrc
+echo 'export PATH="$PNPM_HOME:$PATH"' >> ~/.bashrc
+
+# Install node-gyp globally
+pnpm add -g node-gyp
+```
+
+#### Rust compilation errors
+
+**Symptom:** Cargo build fails with linker errors or missing dependencies
+
+**Solution:**
+```bash
+# Ensure Rust is up to date
+rustup update stable
+
+# Install system dependencies (Ubuntu/Debian)
+sudo apt-get install pkg-config libssl-dev protobuf-compiler clang
+
+# Or on macOS
+brew install protobuf
+```
+
+### Blockchain Issues
+
+#### F1R3node won't accept deployments (Casper not ready)
+
+**Symptom:** Embers API crashes with "casper instance was not available yet"
+
+**Cause:** Blockchain needs time to initialize after genesis
+
+**Solution:**
+1. Wait 2-3 minutes after `shardctl up` for Casper to fully initialize
+2. Check logs for "Making a transition to Running state":
+   ```bash
+   docker logs rnode.bootstrap 2>&1 | grep "Running state"
+   ```
+3. Restart Embers after blockchain is ready:
+   ```bash
+   docker compose -f docker-compose.embers.yml restart
+   ```
+
+#### Blockchain stuck or won't start properly
+
+**Symptom:** Nodes stay unhealthy, or blockchain doesn't complete genesis
+
+**Cause:** Corrupted data from previous run
+
+**Solution:**
+```bash
+# Stop all services
+poetry run shardctl down
+
+# Clean blockchain data
+sudo rm -rf services/f1r3node/docker/data
+
+# Restart (will trigger fresh genesis)
+poetry run shardctl up
+```
+
+**Note:** This is a fresh private blockchain, so cleaning data is safe for development.
+
+### Container Issues
+
+#### Permission denied removing files
+
+**Symptom:** Cannot delete `services/f1r3node/docker/data` files
+
+**Cause:** Docker containers created files as root
+
+**Solution:**
+```bash
+sudo rm -rf services/f1r3node/docker/data
+```
+
+#### Services Won't Start
 
 ```bash
 # Check compose configuration
@@ -431,7 +714,7 @@ shardctl compose ps
 docker ps  # Check for conflicts
 ```
 
-### Permission Issues
+#### Permission Issues
 
 ```bash
 # Shell into container to check
@@ -445,25 +728,40 @@ shardctl exec service-name ls -la /app
 
 ```bash
 # Inspect network
-docker network inspect system-integration_app-network
+docker network inspect f1r3fly
 
 # Restart with fresh network
 shardctl down
 shardctl up
 ```
 
-### Clean Slate
+### Complete Clean Slate
+
+If nothing else works, start completely fresh:
 
 ```bash
-# Stop everything and remove volumes
-shardctl down --volumes
+# Stop everything
+poetry run shardctl down
+docker compose -f docker-compose.f1r3sky.yml down
+docker compose -f docker-compose.embers.yml down
 
-# Remove all containers and networks
-shardctl compose down --remove-orphans
+# Remove all volumes and data
+docker compose -f docker-compose.yml down --volumes
+docker compose -f docker-compose.f1r3sky.yml down --volumes
+sudo rm -rf services/f1r3node/docker/data
 
-# Rebuild everything
-shardctl build --no-cache
-shardctl up --build
+# Remove and re-clone services
+rm -rf services/*
+poetry run shardctl clone
+
+# Rebuild all Docker images
+poetry run shardctl build-service -a
+
+# Start fresh
+poetry run shardctl up
+docker compose -f docker-compose.f1r3sky.yml up -d
+# Wait 2-3 minutes for blockchain initialization
+docker compose -f docker-compose.embers.yml up -d
 ```
 
 ## Advanced Usage
