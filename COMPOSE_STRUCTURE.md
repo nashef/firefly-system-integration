@@ -4,13 +4,16 @@ This repository uses a modular compose file structure, with services separated b
 
 ## Files
 
-### docker-compose.yml (F1R3node Stack)
-**Purpose:** Core blockchain infrastructure
+### docker-compose.yml (Firefly Stack)
+**Purpose:** Core blockchain infrastructure sourced from the Embers reference stack
 **Services:**
-- boot, validator1-3, readonly (F1R3FLY blockchain nodes)
-- prometheus, grafana (monitoring)
+- `firefly`, `firefly-2`, `firefly-3` (mainnet validators)
+- `firefly-read` (mainnet read replica)
+- `firefly-testnet`, `firefly-read-testnet` (testnet validator + read replica)
+- `state-sync-*` helpers (optional profile for ledger uploads)
+- `events-*` helpers (optional profile for AT Protocol bridge)
 
-**Creates:** `f1r3fly` network
+**Creates:** `f1r3fly` network and mounts shared assets under `./docker/`
 
 ### docker-compose.f1r3sky.yml (AT Protocol Stack)  
 **Purpose:** AT Protocol social media services

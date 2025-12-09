@@ -257,7 +257,7 @@ Start all services using shardctl (which automatically orchestrates all configur
 poetry run shardctl up
 ```
 
-**Important:** F1R3node blockchain needs 2-3 minutes after startup to:
+**Important:** The Firefly blockchain stack needs 2-3 minutes after startup to:
 1. Complete genesis ceremony (validators signing genesis block)
 2. Transition to "Running" state
 3. Initialize Casper consensus (ready to accept deployments)
@@ -265,7 +265,7 @@ poetry run shardctl up
 Wait for blockchain initialization before using Embers API. You can monitor the blockchain startup progress with:
 
 ```bash
-poetry run shardctl logs --follow rnode.bootstrap
+poetry run shardctl logs --follow firefly
 ```
 
 #### 7. Verify All Services Running
@@ -281,18 +281,19 @@ poetry run shardctl ps
 ```
 
 You should see:
-- **F1R3node**: 5 nodes (bootstrap, validator1-3, readonly) - all healthy
+- **Firefly nodes**: `firefly`, `firefly-2`, `firefly-3`, `firefly-read`, `firefly-testnet`, `firefly-read-testnet`
+- **Optional sync helpers**: `state-sync-*`, `events-*` (only when those profiles are enabled)
 - **F1R3Sky**: postgres, redis (healthy), bsky, pds, bsync, ozone
-- **Embers**: embers-api
-- **Monitoring**: prometheus, grafana
+- **Embers**: embers-api and embers-frontend
 
 #### 8. Access Services
 
 Services are now accessible:
 
-- **F1R3node RPC** (validator1): http://localhost:40411
-- **F1R3node API** (validator1): http://localhost:40413
-- **F1R3node Read-only**: http://localhost:40453
+- **Firefly mainnet deploy/propose/REST**: http://localhost:14401 / 14402 / 14403
+- **Firefly read replica (REST + WS)**: http://localhost:14413
+- **Firefly testnet deploy/propose/REST**: http://localhost:15401 / 15402 / 15403
+- **Firefly testnet read replica**: http://localhost:15413
 - **Embers API**: http://localhost:8080
 - **F1R3Sky PDS**: http://localhost:2583
 - **F1R3Sky BSKY (AppView)**: http://localhost:2584
@@ -305,8 +306,8 @@ Services are now accessible:
 Monitor service logs using shardctl:
 
 ```bash
-# F1R3node blockchain logs
-poetry run shardctl logs --follow rnode.bootstrap
+# Firefly blockchain logs
+poetry run shardctl logs --follow firefly
 
 # Embers API logs
 poetry run shardctl logs --follow embers-api
@@ -682,7 +683,7 @@ The `pnpm` command will use IPv6 if it appears to be available and has no option
 
 ### Blockchain Issues
 
-#### F1R3node won't accept deployments (Casper not ready)
+#### Firefly node won't accept deployments (Casper not ready)
 
 **Symptom:** Embers API crashes with "casper instance was not available yet"
 
@@ -692,7 +693,7 @@ The `pnpm` command will use IPv6 if it appears to be available and has no option
 1. Wait 2-3 minutes after `shardctl up` for Casper to fully initialize
 2. Check logs for "Making a transition to Running state":
    ```bash
-   poetry run shardctl logs rnode.bootstrap | grep "Running state"
+   poetry run shardctl logs firefly | grep "Running state"
    ```
 3. Restart Embers after blockchain is ready:
    ```bash
