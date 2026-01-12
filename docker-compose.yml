@@ -149,7 +149,7 @@ services:
 
   state-sync-init:
     build:
-      context: ../embers
+      context: ./services/embers
       dockerfile: docker/state-sync.dockerfile
       args:
         POSTGRESQL_VERSION: 17
@@ -170,7 +170,7 @@ services:
 
   state-sync:
     build:
-      context: ../embers
+      context: ./services/embers
       dockerfile: docker/state-sync.dockerfile
       args:
         POSTGRESQL_VERSION: 17
@@ -194,7 +194,7 @@ services:
 
   events-init:
     build:
-      context: ../embers
+      context: ./services/embers
       dockerfile: docker/events-sync.dockerfile
     depends_on:
       firefly:
@@ -213,7 +213,7 @@ services:
 
   events-listen:
     build:
-      context: ../embers
+      context: ./services/embers
       dockerfile: docker/events-sync.dockerfile
     depends_on:
       firefly:
@@ -241,7 +241,7 @@ services:
 
   events-push:
     build:
-      context: ../embers
+      context: ./services/embers
       dockerfile: docker/events-sync.dockerfile
     depends_on:
       firefly:

@@ -15,6 +15,12 @@ console = Console()
 class ComposeManager:
     """Manager class for wrapping docker-compose commands."""
 
+    # Mapping of compose files to their env files
+    COMPOSE_ENV_FILES = {
+        "docker-compose.f1r3sky.yml": ".env.f1r3sky",
+        "docker-compose.embers.yml": ".env.embers",
+    }
+
     def __init__(self, config: Config, profile: Optional[str] = None):
         """Initialize ComposeManager.
 
@@ -25,6 +31,22 @@ class ComposeManager:
         self.config = config
         self.profile = profile
 
+    def _get_env_file_for_compose(self, compose_file: Path) -> Optional[Path]:
+        """Get the env file associated with a compose file.
+
+        Args:
+            compose_file: Path to the compose file.
+
+        Returns:
+            Path to the env file if one exists, None otherwise.
+        """
+        env_filename = self.COMPOSE_ENV_FILES.get(compose_file.name)
+        if env_filename:
+            env_file = self.config.root_dir / env_filename
+            if env_file.exists():
+                return env_file
+        return None
+
     def _build_base_command(self) -> List[str]:
         """Build base docker-compose command with file flags.
 
@@ -33,9 +55,13 @@ class ComposeManager:
         """
         cmd = ["docker", "compose"]
 
-        # Add compose files with -f flags
+        # Add compose files with -f flags and their associated env files
         compose_files = self.config.get_compose_files_for_profile(self.profile)
         for compose_file in compose_files:
+            # Add env file if one is associated with this compose file
+            env_file = self._get_env_file_for_compose(compose_file)
+            if env_file:
+                cmd.extend(["--env-file", str(env_file)])
             cmd.extend(["-f", str(compose_file)])
 
         # Add profile flag if specified
@@ -142,7 +168,14 @@ class ComposeManager:
             detached: Run in detached mode.
             build: Build images before starting.
         """
-        cmd = ["docker", "compose", "-f", str(compose_file), "up"]
+        cmd = ["docker", "compose"]
+
+        # Add env file if one is associated with this compose file
+        env_file = self._get_env_file_for_compose(compose_file)
+        if env_file:
+            cmd.extend(["--env-file", str(env_file)])
+
+        cmd.extend(["-f", str(compose_file), "up"])
 
         if detached:
             cmd.append("-d")
