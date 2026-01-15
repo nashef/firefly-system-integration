@@ -219,7 +219,7 @@ services:
       args:
         NPM_TOKEN: ${NPM_TOKEN}
         EXPO_PUBLIC_EMBERS_URL: ${EXPO_PUBLIC_EMBERS_URL:-http://localhost:5173}
-        EXPO_PUBLIC_EMBERS_API_URL: ${EXPO_PUBLIC_EMBERS_API_URL:-http://localhost:3030}
+        EXPO_PUBLIC_EMBERS_API_URL: ${EXPO_PUBLIC_EMBERS_API_URL:-http://localhost:8080}
     image: f1r3flyindustries/f1r3sky:latest
     container_name: f1r3sky
     ports:

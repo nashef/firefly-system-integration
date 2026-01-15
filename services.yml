@@ -21,8 +21,8 @@ startup_order:
 
 repositories:
   f1r3node:
-    url: git@github.com:nashef/f1r3fly.git
-    branch: casper-bugs  # Working branch for bug fixes
+    url: git@github.com:F1R3FLY-io/f1r3node.git
+    branch: main  # Working branch for bug fixes
   f1r3node-rust:
     url: git@github.com:F1R3FLY-io/f1r3node.git
     branch: rust-dev  # Rust node on rust-dev branch
@@ -35,7 +35,7 @@ repositories:
     branch: main
   f1r3sky:
     url: git@github.com:F1R3FLY-io/f1r3sky.git
-    branch: main
+    branch: aidan-tipping-demo-old
     enabled: true  # Frontend demo
   embers:
     url: git@github.com:nashef/firefly-embers.git

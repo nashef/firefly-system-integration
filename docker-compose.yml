@@ -13,11 +13,10 @@ services:
       - 14403:40403 # rest api
     volumes:
       - ./docker/mainnet/genesis:/var/lib/rnode/genesis
-      - ./docker/certs/node.key.pem:/var/lib/rnode/node.key.pem:ro
-      - ./docker/certs/node.certificate.pem:/var/lib/rnode/node.certificate.pem:ro
     command:
       - run
       - -s
+      - --autopropose
       - --validator-private-key=6a786ec387aff99fcce1bd6faa35916bfad3686d5c98e90a89f77670f535607c
       - --host=firefly
       - --no-upnp
@@ -25,8 +24,6 @@ services:
       - --synchrony-constraint-threshold=0.0
       - --protocol-port=40400
       - --discovery-port=40404
-      - --tls-key-path=/var/lib/rnode/node.key.pem
-      - --tls-certificate-path=/var/lib/rnode/node.certificate.pem
 
   firefly-2:
     image: f1r3flyindustries/f1r3fly-scala-node:latest
@@ -43,11 +40,10 @@ services:
       - 14424:40404 # discovery
     volumes:
       - ./docker/mainnet/genesis:/var/lib/rnode/genesis
-      - ./docker/certs/node.key.pem:/var/lib/rnode/node.key.pem:ro
-      - ./docker/certs/node.certificate.pem:/var/lib/rnode/node.certificate.pem:ro
     command:
       - run
       - -s
+      - --autopropose
       - --bootstrap=rnode://ebffd419dea60220734ccea8875e86d87bac10a7@firefly?protocol=40400&discovery=40404
       - --validator-private-key=6a786ec387aff99fcce1bd6faa35916bfad3686d5c98e90a89f77670f535607c
       - --host=firefly-2
@@ -56,8 +52,6 @@ services:
       - --synchrony-constraint-threshold=0.0
       - --protocol-port=40400
       - --discovery-port=40404
-      - --tls-key-path=/var/lib/rnode/node.key.pem
-      - --tls-certificate-path=/var/lib/rnode/node.certificate.pem
 
   firefly-3:
     image: f1r3flyindustries/f1r3fly-scala-node:latest
@@ -74,11 +68,10 @@ services:
       - 14434:40404 # discovery
     volumes:
       - ./docker/mainnet/genesis:/var/lib/rnode/genesis
-      - ./docker/certs/node.key.pem:/var/lib/rnode/node.key.pem:ro
-      - ./docker/certs/node.certificate.pem:/var/lib/rnode/node.certificate.pem:ro
     command:
       - run
       - -s
+      - --autopropose
       - --bootstrap=rnode://ebffd419dea60220734ccea8875e86d87bac10a7@firefly?protocol=40400&discovery=40404
       - --validator-private-key=6a786ec387aff99fcce1bd6faa35916bfad3686d5c98e90a89f77670f535607c
       - --host=firefly-3
@@ -87,8 +80,6 @@ services:
       - --synchrony-constraint-threshold=0.0
       - --protocol-port=40400
       - --discovery-port=40404
-      - --tls-key-path=/var/lib/rnode/node.key.pem
-      - --tls-certificate-path=/var/lib/rnode/node.certificate.pem
 
   firefly-read:
     image: f1r3flyindustries/f1r3fly-scala-node:latest
@@ -117,11 +108,10 @@ services:
       - 15403:40403 # rest api
     volumes:
       - ./docker/testnet/genesis:/var/lib/rnode/genesis
-      - ./docker/certs/node.key.pem:/var/lib/rnode/node.key.pem:ro
-      - ./docker/certs/node.certificate.pem:/var/lib/rnode/node.certificate.pem:ro
     command:
       - run
       - -s
+      - --autopropose
       - --validator-private-key=6a786ec387aff99fcce1bd6faa35916bfad3686d5c98e90a89f77670f535607c
       - --host=firefly-testnet
       - --no-upnp
@@ -129,8 +119,6 @@ services:
       - --synchrony-constraint-threshold=0.0
       - --protocol-port=40400
       - --discovery-port=40404
-      - --tls-key-path=/var/lib/rnode/node.key.pem
-      - --tls-certificate-path=/var/lib/rnode/node.certificate.pem
 
   firefly-read-testnet:
     image: f1r3flyindustries/f1r3fly-scala-node:latest

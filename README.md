@@ -683,6 +683,24 @@ The `pnpm` command will use IPv6 if it appears to be available and has no option
 
 ### Blockchain Issues
 
+#### Nodes 2/3 repeatedly log "Requested fork tip from peers"
+
+**Cause:** your nodes are sharing the same TLS key/certificate, which means they share the same network identity (peer ID). Peers treat them as the *same node*, so they never form stable connections and keep trying to sync.
+
+**Fix:** let each container generate its own TLS identity (built-in). Remove shared TLS mounts/flags and restart:
+
+- `poetry run shardctl down`
+- (optional clean slate) `sudo rm -rf services/f1r3node/docker/data`
+- `poetry run shardctl up`
+
+**Verification:** cert hashes should differ across nodes:
+
+```bash
+docker exec firefly-system-integration-firefly-1 sha256sum /var/lib/rnode/node.certificate.pem /var/lib/rnode/node.key.pem
+docker exec firefly-system-integration-firefly-2-1 sha256sum /var/lib/rnode/node.certificate.pem /var/lib/rnode/node.key.pem
+docker exec firefly-system-integration-firefly-3-1 sha256sum /var/lib/rnode/node.certificate.pem /var/lib/rnode/node.key.pem
+```
+
 #### Firefly node won't accept deployments (Casper not ready)
 
 **Symptom:** Embers API crashes with "casper instance was not available yet"
