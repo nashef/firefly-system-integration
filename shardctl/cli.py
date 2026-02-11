@@ -1,5 +1,6 @@
 """CLI application for shardctl."""
 
+import os
 import subprocess
 from pathlib import Path
 from typing import List, Optional
@@ -507,6 +508,134 @@ def restart(
     console.print("[bold blue]Restarting services...[/bold blue]")
     manager.restart(services=services)
     console.print("[green]✓[/green] Services restarted successfully")
+
+
+@app.command()
+def build(
+    services: Optional[List[str]] = typer.Argument(None, help="Services to build"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Compose profile (dev/prod)"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not use cache when building"),
+    no_docker: bool = typer.Option(
+        False,
+        "--no-docker",
+        help="Skip building Docker images (only build from source)"
+    ),
+    docker_only: bool = typer.Option(
+        False,
+        "--docker-only",
+        help="Only build Docker images (skip source build)"
+    ),
+):
+    """Build services using build commands from services.yml.
+
+    By default, builds all enabled services (both from source and Docker images).
+    Specify service names to build specific services regardless of enabled status.
+
+    Examples:
+        shardctl build                    # Build all enabled services
+        shardctl build --no-docker        # Build all enabled services (source only)
+        shardctl build --docker-only      # Build all enabled services (Docker only)
+        shardctl build f1r3node embers    # Build specific services
+    """
+    if not validate_environment():
+        raise typer.Exit(1)
+
+    if no_docker and docker_only:
+        console.print("[red]Error: --no-docker and --docker-only cannot be used together[/red]")
+        raise typer.Exit(1)
+
+    config = Config()
+
+    # Build all enabled services if no services specified
+    if not services:
+        build_configs = config.get_all_build_configs(only_enabled=True)
+        if not build_configs:
+            console.print("[yellow]No enabled services with build configurations found[/yellow]")
+            return
+
+        if no_docker:
+            console.print(f"[bold blue]Building {len(build_configs)} enabled service(s) from source...[/bold blue]\n")
+        elif docker_only:
+            console.print(f"[bold blue]Building Docker images for {len(build_configs)} enabled service(s)...[/bold blue]\n")
+        else:
+            console.print(f"[bold blue]Building {len(build_configs)} enabled service(s) (source + Docker)...[/bold blue]\n")
+
+        for svc_name, build_config in build_configs.items():
+            console.print(f"[cyan]Building {svc_name}...[/cyan]")
+
+            # Get service path
+            working_dir = build_config.get("working_directory")
+            if working_dir:
+                service_path = config.services_dir / working_dir
+            else:
+                service_path = config.services_dir / svc_name
+
+            # Build from source first (unless docker-only)
+            if not docker_only:
+                success = build_service(svc_name, service_path, build_config, docker=False)
+                if not success:
+                    console.print(f"[red]✗[/red] Build failed, stopping")
+                    raise typer.Exit(1)
+
+            # Build Docker image if not skipped
+            if not no_docker:
+                if build_config.get("docker_build_command"):
+                    success_docker = build_service(svc_name, service_path, build_config, docker=True)
+                    if not success_docker:
+                        console.print(f"[red]✗[/red] Docker build failed, stopping")
+                        raise typer.Exit(1)
+                elif not docker_only:
+                    pass  # No docker build command, that's okay
+                else:
+                    console.print(f"[dim]No Docker build command configured for {svc_name}, skipping[/dim]")
+
+            console.print()  # Empty line between services
+
+        console.print(f"[green]✓[/green] All {len(build_configs)} service(s) built successfully")
+        return
+
+    # Build specific services
+    console.print("[bold blue]Building specified services...[/bold blue]\n")
+
+    for svc_name in services:
+        build_config = config.get_service_build_config(svc_name)
+
+        if not build_config:
+            console.print(
+                f"[red]No build configuration found for service '{svc_name}'[/red]\n"
+                f"[dim]Add build configuration to services.yml[/dim]"
+            )
+            raise typer.Exit(1)
+
+        console.print(f"[cyan]Building {svc_name}...[/cyan]")
+
+        # Get service path
+        working_dir = build_config.get("working_directory")
+        if working_dir:
+            service_path = config.services_dir / working_dir
+        else:
+            service_path = config.services_dir / svc_name
+
+        # Build from source first (unless docker-only)
+        if not docker_only:
+            success = build_service(svc_name, service_path, build_config, docker=False)
+            if not success:
+                raise typer.Exit(1)
+
+        # Build Docker image if not skipped
+        if not no_docker:
+            if build_config.get("docker_build_command"):
+                success_docker = build_service(svc_name, service_path, build_config, docker=True)
+                if not success_docker:
+                    raise typer.Exit(1)
+            elif docker_only:
+                console.print(f"[dim]No Docker build command configured for {svc_name}, skipping[/dim]")
+            else:
+                console.print(f"[dim]No Docker build command configured for {svc_name}, skipping Docker build[/dim]")
+
+        console.print()
+
+    console.print("[green]✓[/green] Build completed successfully")
 
 
 @app.command()
@@ -1023,6 +1152,216 @@ def reset_cmd(
         console.print("[green]Data directory deleted[/green]")
     else:
         console.print("[dim]No data directory to delete[/dim]")
+
+
+@app.command(name="test")
+def test_cmd(
+    suite: Optional[str] = typer.Argument(
+        None,
+        help="Test suite to run (e.g., test_wallets, test_web_api). Omit to run all."
+    ),
+    image: Optional[str] = typer.Option(
+        None,
+        "--image",
+        "-i",
+        help="Docker image for test shard nodes (default: f1r3flyindustries/f1r3fly-scala-node)"
+    ),
+    scala: bool = typer.Option(False, "--scala", help="Use Scala node image"),
+    rust: bool = typer.Option(False, "--rust", help="Use Rust node image"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose pytest output"),
+    skip_setup: bool = typer.Option(
+        False,
+        "--skip-setup",
+        help="Skip shard bring-up/teardown (assume shard is already running)"
+    ),
+    extra_args: Optional[List[str]] = typer.Option(
+        None,
+        "--pytest-args",
+        "-a",
+        help="Additional arguments to pass to pytest"
+    ),
+):
+    """Run integration tests against a full F1R3FLY shard (boot + 3 validators + readonly).
+
+    Tests bring up a fresh shard using the same configuration as the dev
+    setup (conf, genesis, certs), run the test suite, then tear down.
+
+    Use --skip-setup to run tests against an already-running shard.
+
+    Examples:
+        poetry run shardctl test                         # Run all tests (Scala image)
+        poetry run shardctl test test_wallets             # Run wallet tests only
+        poetry run shardctl test --scala                  # Explicit Scala image
+        poetry run shardctl test --rust                   # Run against Rust image
+        poetry run shardctl test test_web_api --verbose   # Verbose output
+        poetry run shardctl test --skip-setup             # Test against running shard
+        poetry run shardctl test --image myimage:latest   # Custom image
+    """
+    config = Config()
+    tests_dir = config.root_dir / "integration-tests"
+
+    if not tests_dir.exists():
+        console.print("[red]Integration tests directory not found[/red]")
+        console.print(f"[dim]Expected: {tests_dir}[/dim]")
+        raise typer.Exit(1)
+
+    # Determine the Docker image to use
+    if image:
+        docker_image = image
+    elif rust:
+        docker_image = "f1r3flyindustries/f1r3fly-rust-node:latest"
+    else:
+        docker_image = "f1r3flyindustries/f1r3fly-scala-node:latest"
+
+    console.print(f"[bold blue]Running integration tests[/bold blue]")
+    console.print(f"  Image: [cyan]{docker_image}[/cyan]")
+    if suite:
+        console.print(f"  Suite: [cyan]{suite}[/cyan]")
+    if skip_setup:
+        console.print(f"  Mode:  [yellow]skip-setup (using running shard)[/yellow]")
+    console.print()
+
+    # Build pytest command
+    env = os.environ.copy()
+    env["DEFAULT_IMAGE"] = docker_image
+
+    pytest_args = ["-v"] if verbose else []
+
+    if suite:
+        pytest_args.extend(["-k", suite])
+
+    if skip_setup:
+        pytest_args.append("--skip-setup")
+
+    if extra_args:
+        pytest_args.extend(extra_args)
+
+    console.print(f"[dim]$ pytest {' '.join(pytest_args)}[/dim]")
+    console.print()
+
+    result = subprocess.run(
+        ["python3", "-m", "pytest"] + pytest_args,
+        cwd=tests_dir,
+        env=env,
+    )
+
+    if result.returncode == 0:
+        console.print()
+        console.print("[green]All tests passed![/green]")
+    else:
+        console.print()
+        console.print(f"[red]Tests failed (exit code {result.returncode})[/red]")
+        raise typer.Exit(result.returncode)
+
+
+@app.command(name="test-reset")
+def test_reset_cmd():
+    """Clean up integration test data and containers.
+
+    Stops all containers that may have been started by the integration
+    test fixtures (shard, standalone, and custom shard) and deletes the
+    integration-tests/data/ directory (which may contain root-owned
+    files created by Docker).
+
+    Examples:
+        poetry run shardctl test-reset
+    """
+    import docker as docker_py
+
+    config = Config()
+    tests_dir = config.root_dir / "integration-tests"
+
+    if not tests_dir.exists():
+        console.print("[red]Integration tests directory not found[/red]")
+        raise typer.Exit(1)
+
+    # ── Compose-managed containers (shard + standalone) ──
+    # Project names must match those used in conftest.py to correctly
+    # identify and stop containers started by the test fixtures.
+    shard_compose_files = [
+        ("docker-compose.scala.yml", "f1r3fly-shard"),
+        ("docker-compose.rust.yml", "f1r3fly-shard"),
+    ]
+    standalone_compose_files = [
+        ("docker-compose.standalone-scala.yml", "f1r3fly-standalone"),
+        ("docker-compose.standalone-rust.yml", "f1r3fly-standalone"),
+    ]
+
+    for compose_file, project_name in shard_compose_files + standalone_compose_files:
+        compose_path = tests_dir / compose_file
+        if compose_path.exists():
+            console.print(f"[dim]Stopping containers from {compose_file} (project: {project_name})...[/dim]")
+            subprocess.run(
+                [
+                    "docker-compose",
+                    "--project-name", project_name,
+                    "--env-file", str(tests_dir / ".env.node"),
+                    "-f", str(compose_path),
+                    "down", "--volumes", "--remove-orphans",
+                ],
+                cwd=tests_dir,
+                check=False,
+            )
+
+    # ── Custom shard containers (started via Docker SDK, not compose) ──
+    # These are created by start_custom_shard() and add_peer_to_shard()
+    # in conftest.py. Container names match the constants defined there.
+    custom_containers = [
+        "rnode.custom.boot",
+        "rnode.custom.validator1",
+        "rnode.custom.validator2",
+        "rnode.custom.validator3",
+        "rnode.custom.joiner",
+    ]
+    try:
+        client = docker_py.from_env()
+        for name in custom_containers:
+            try:
+                container = client.containers.get(name)
+                console.print(f"[dim]Stopping custom container {name}...[/dim]")
+                try:
+                    container.stop(timeout=10)
+                except Exception:
+                    pass
+                container.remove(force=True)
+            except docker_py.errors.NotFound:
+                pass
+            except Exception as e:
+                console.print(f"[dim]Warning: could not remove {name}: {e}[/dim]")
+
+        # Remove the custom shard Docker network if it exists
+        try:
+            network = client.networks.get("f1r3fly-test-custom")
+            console.print("[dim]Removing custom shard network f1r3fly-test-custom...[/dim]")
+            network.remove()
+        except docker_py.errors.NotFound:
+            pass
+        except Exception as e:
+            console.print(f"[dim]Warning: could not remove network: {e}[/dim]")
+
+        client.close()
+    except Exception as e:
+        console.print(f"[dim]Warning: could not connect to Docker for custom cleanup: {e}[/dim]")
+
+    # ── Delete data directory ──
+    data_dir = tests_dir / "data"
+    if data_dir.exists():
+        console.print("Deleting integration test data directory...")
+        console.print("[dim](Using Docker container to delete root-owned files)[/dim]")
+        subprocess.run(
+            ["docker", "run", "--rm", "-v", f"{data_dir}:/data", "alpine",
+             "sh", "-c", "rm -rf /data/*"],
+            check=False,
+        )
+        # Remove empty subdirectories
+        try:
+            import shutil
+            shutil.rmtree(str(data_dir), ignore_errors=True)
+        except OSError:
+            pass
+        console.print("[green]Integration test data deleted[/green]")
+    else:
+        console.print("[dim]No integration test data to delete[/dim]")
 
 
 @app.callback()
